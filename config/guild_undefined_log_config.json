@@ -1,0 +1,39 @@
+{
+  "enabled": true,
+  "channels": {
+    "members": null,
+    "moderation": null,
+    "messages": null,
+    "voice": null,
+    "roles": null,
+    "server": null,
+    "channels": null,
+    "tickets": null,
+    "suggestions": null
+  },
+  "logTypes": {
+    "memberJoin": true,
+    "memberLeave": true,
+    "memberUpdate": true,
+    "ban": true,
+    "unban": true,
+    "messageDelete": true,
+    "messageEdit": true,
+    "voiceStateChange": true,
+    "roleCreate": true,
+    "roleDelete": true,
+    "roleUpdate": true,
+    "channelCreate": true,
+    "channelDelete": true,
+    "channelUpdate": true,
+    "ticketCreate": true,
+    "ticketClose": true,
+    "suggestionCreate": true,
+    "suggestionUpdate": true
+  },
+  "advancedSettings": {
+    "maxLogEntries": 1000,
+    "retentionPeriod": 30,
+    "verboseLogging": false
+  }
+}

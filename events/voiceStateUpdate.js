@@ -77,25 +77,80 @@ module.exports = {
         });
       }
       
-      // 3. Moveu-se entre canais de voz (ou foi movido)
-      else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-        // Verificar se foi movido por algum moderador ou se moveu por conta própria
-        const wasMoved = actionExecutor && actionExecutor.id !== member.id;
-        
-        await LogManager.sendLog(client, {
-          title: wasMoved ? '🎙️ Movido Entre Canais de Voz' : '🎙️ Moveu-se Entre Canais de Voz',
-          color: 'Blue',
-          thumbnail: member.user.displayAvatarURL(),
-          fields: [
-            { name: '👤 Usuário', value: `${member.user.tag} (${member.user.id})`, inline: true },
-            // Se foi movido por alguém, mostrar quem moveu
-            ...(wasMoved ? [{ name: '👮 Movido por', value: `${actionExecutor.tag} (${actionExecutor.id})`, inline: true }] : []),
-            { name: '🔊 De', value: `${oldState.channel.name} (<#${oldState.channelId}>)`, inline: true },
-            { name: '🔊 Para', value: `${newState.channel.name} (<#${newState.channelId}>)`, inline: true },
-            { name: '⏰ Horário', value: LogManager.formatTimestamp(Date.now()), inline: false }
-          ]
-        });
+// 3. Moveu-se entre canais de voz (ou foi movido)
+else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+  // Adicionar um pequeno atraso para dar tempo do Discord registrar o log
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  // Verificar quem moveu o usuário
+  let actionExecutor = null;
+  let wasMoved = false;
+  
+  try {
+    // Buscar logs de auditoria para movimentação
+    const auditLogs = await newState.guild.fetchAuditLogs({
+      limit: 10,
+      type: 26 // MEMBER_MOVE
+    });
+    
+    // Verificar cada log
+    for (const entry of auditLogs.entries) {
+      const log = entry[1]; // Acessar o objeto log a partir do par [id, log]
+      
+      // Verificar as extras para encontrar o ID do usuário movido
+      if (log.extra && log.extra.channel && log.extra.count) {
+        // Verificar se as alterações incluem o canal de destino do membro
+        if (log.extra.channel.id === newState.channelId && Date.now() - log.createdTimestamp < 10000) {
+          // Verificar se o membro está na lista de membros afetados
+          // Aqui não podemos verificar diretamente pelo extra, então verificamos por tempo e contexto
+          actionExecutor = log.executor;
+          wasMoved = true;
+          break;
+        }
       }
+    }
+    
+    // Se não encontramos o executor especificamente, verificar se o membro moveu a si mesmo
+    if (!actionExecutor) {
+      // Se não encontramos nenhum log relevante, assumimos que o usuário moveu a si mesmo
+      actionExecutor = member.user;
+      wasMoved = false;
+    }
+  } catch (error) {
+    console.error('Erro ao buscar logs de auditoria:', error);
+    // Em caso de erro, assumir que o usuário moveu a si mesmo
+    actionExecutor = member.user;
+    wasMoved = false;
+  }
+  
+  // Determinar se foi movido por alguém ou se moveu sozinho
+  wasMoved = actionExecutor && actionExecutor.id !== member.id;
+  
+  // Criar campos do log
+  const fields = [
+    { name: '👤 Usuário', value: `${member.user.tag} (${member.user.id})`, inline: true }
+  ];
+  
+  // Incluir informação de quem moveu se for o caso
+  if (wasMoved) {
+    fields.push({ name: '👮 Movido por', value: `${actionExecutor.tag} (${actionExecutor.id})`, inline: true });
+  }
+  
+  // Adicionar informações dos canais
+  fields.push(
+    { name: '🔊 De', value: `${oldState.channel.name} (<#${oldState.channelId}>)`, inline: true },
+    { name: '🔊 Para', value: `${newState.channel.name} (<#${newState.channelId}>)`, inline: true },
+    { name: '⏰ Horário', value: LogManager.formatTimestamp(Date.now()), inline: false }
+  );
+  
+  // Enviar o log
+  await LogManager.sendLog(client, {
+    title: wasMoved ? '🎙️ Movido Entre Canais de Voz' : '🎙️ Moveu-se Entre Canais de Voz',
+    color: 'Blue',
+    thumbnail: member.user.displayAvatarURL(),
+    fields: fields
+  });
+}
       
       // 4. Alterou estado de mudo
       if (oldState.mute !== newState.mute) {

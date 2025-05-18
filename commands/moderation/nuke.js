@@ -69,7 +69,7 @@ module.exports = {
           }
           
           await statusMsg.delete();
-          const logMsg = await message.channel.send(`\`\`\`\nCanal limpo por: ${message.author.tag}\n${messagesDeleted} mensagens removidas\n\`\`\``);
+          const logMsg = await message.channel.send(`\`\`\`\nnuke por: ${message.author.tag}\n${messagesDeleted} mensagens removidas\n\`\`\``);
           
           // Log
           console.log(`✅ Canal ${message.channel.name} nukado por ${message.author.tag} (${messagesDeleted} mensagens)`);
