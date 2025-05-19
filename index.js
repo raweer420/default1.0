@@ -1,3 +1,5 @@
+process.env.DEBUG = 'distube:spotify';
+
 const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -6,7 +8,7 @@ const setupMusicSystem = require('./helpers/musicSystem');
 const { setupPlayDl } = require('./preload');
 const LogManager = require('./logger/logManager');
 
-// Função para mostrar uma mensagem bonita de inicialização
+// Função para mostrar mensagem inicial estilizada
 function showStartupMessage() {
   console.log('='.repeat(50));
   console.log('BOT DISCORD - SISTEMA DE VERIFICAÇÃO, LOGS E MÚSICA');
@@ -17,7 +19,7 @@ function showStartupMessage() {
   console.log('='.repeat(50));
 }
 
-// Inicializar o cliente Discord
+// Inicializa cliente Discord com intents e partials necessários
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -43,7 +45,7 @@ client.cooldowns = new Collection();
 
 showStartupMessage();
 
-// Verificar e registrar canal de logs durante a inicialização
+// Verifica se o canal de logs está configurado e acessível
 async function verifyLogChannel() {
   if (!config.LOG_CHANNEL_ID) {
     console.error('❌ ERRO CRÍTICO: Canal de logs não configurado!');
@@ -53,21 +55,13 @@ async function verifyLogChannel() {
   try {
     const logChannel = await client.channels.fetch(config.LOG_CHANNEL_ID);
     console.log(`✅ Canal de logs encontrado: ${logChannel.name} (${logChannel.id})`);
-    
-    // Verificar permissões do bot no canal de logs
+
     const botMember = logChannel.guild.members.me;
     const permissions = logChannel.permissionsFor(botMember);
-    
-    const requiredPermissions = [
-      'ViewChannel',
-      'SendMessages', 
-      'EmbedLinks'
-    ];
 
-    const missingPermissions = requiredPermissions.filter(
-      permission => !permissions.has(permission)
-    );
+    const requiredPermissions = ['ViewChannel', 'SendMessages', 'EmbedLinks'];
 
+    const missingPermissions = requiredPermissions.filter(p => !permissions.has(p));
     if (missingPermissions.length > 0) {
       console.error(`❌ Permissões faltantes no canal de logs: ${missingPermissions.join(', ')}`);
       return false;
@@ -80,15 +74,14 @@ async function verifyLogChannel() {
   }
 }
 
-// Carregar eventos
+// Carrega todos os eventos da pasta /events
 console.log('==== CARREGAMENTO DE EVENTOS ====');
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
 for (const file of eventFiles) {
   try {
-    const filePath = path.join(eventsPath, file);
-    const event = require(filePath);
+    const event = require(path.join(eventsPath, file));
     const eventName = event.name || file.split('.')[0];
 
     if (event.execute) {
@@ -104,23 +97,20 @@ for (const file of eventFiles) {
   }
 }
 
-// Carregar comandos
+// Carrega comandos organizados em subpastas da pasta /commands
 console.log('==== CARREGAMENTO DE COMANDOS ====');
 const commandsPath = path.join(__dirname, 'commands');
-const commandFolders = fs.readdirSync(commandsPath);
+const commandFolders = fs.readdirSync(commandsPath).filter(f => fs.statSync(path.join(commandsPath, f)).isDirectory());
 
 for (const folder of commandFolders) {
   const folderPath = path.join(commandsPath, folder);
-  if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) continue;
-
   const commandFiles = fs.readdirSync(folderPath).filter(file => file.endsWith('.js'));
+  
   console.log(`Comandos na pasta ${folder}: ${commandFiles.join(', ')}`);
 
   for (const file of commandFiles) {
     try {
-      const filePath = path.join(folderPath, file);
-      const command = require(filePath);
-
+      const command = require(path.join(folderPath, file));
       if (command.name) {
         command.category = folder.charAt(0).toUpperCase() + folder.slice(1);
         client.commands.set(command.name, command);
@@ -132,17 +122,17 @@ for (const folder of commandFolders) {
   }
 }
 
-// Login do cliente
+// Evento 'ready' para inicializar o bot
 client.once('ready', async () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
 
-  // Configurar play-dl
+  // Configurar play-dl (para música)
   await setupPlayDl();
 
   // Verificar canal de logs
   const logChannelVerified = await verifyLogChannel();
 
-  // Tentar enviar log de inicialização
+  // Enviar log de inicialização para canal de logs
   try {
     if (logChannelVerified) {
       await LogManager.sendLog(client, {
@@ -162,10 +152,10 @@ client.once('ready', async () => {
     console.error('❌ Erro ao enviar log de inicialização:', logError);
   }
 
-  // Configurar status do bot
+  // Setar atividade do bot
   client.user.setActivity('verificação de membros', { type: 'Watching' });
 
-  // Iniciar sistema de música
+  // Inicializar sistema de música
   console.log('🎵 Inicializando sistema de música...');
   try {
     const distube = setupMusicSystem(client);
@@ -179,7 +169,7 @@ client.once('ready', async () => {
   }
 });
 
-// Sistema de comandos
+// Listener para comandos prefixados
 client.on('messageCreate', async message => {
   if (!message.content.startsWith(config.PREFIX) || message.author.bot) return;
 
@@ -191,28 +181,25 @@ client.on('messageCreate', async message => {
 
   if (!command) return;
 
-  // Verificar permissões para comandos administrativos
-  const checkPermission = (message) => {
-    if (!message.guild) return false;
-    if (message.guild.ownerId === message.author.id) return true;
-    
+  // Função para checar permissões administrativas
+  const checkPermission = (msg) => {
+    if (!msg.guild) return false;
+    if (msg.guild.ownerId === msg.author.id) return true;
+
     const adminRoles = [
       config.NUKE_ROLE_ID,
-      // Adicione outros IDs de cargos administrativos aqui
+      // Outros IDs de cargos administrativos podem ser adicionados aqui
     ];
 
-    return adminRoles.some(roleId => 
-      message.member.roles.cache.has(roleId)
-    );
+    return adminRoles.some(roleId => msg.member.roles.cache.has(roleId));
   };
 
-  // Verificar permissões para comandos administrativos
-  if (!['music', 'utility'].includes(command.category.toLowerCase()) && 
-      !checkPermission(message)) {
+  // Bloquear comandos administrativos para usuários sem permissão
+  if (!['music', 'utility'].includes(command.category.toLowerCase()) && !checkPermission(message)) {
     try {
       const deniedMessage = await message.reply('❌ Você não tem permissão para usar este comando.');
-      
-      // Registrar tentativa de comando não autorizado
+
+      // Log da tentativa não autorizada
       await LogManager.sendLog(client, {
         title: '🚫 Tentativa de Comando Não Autorizada',
         color: 'Red',
@@ -223,18 +210,19 @@ client.on('messageCreate', async message => {
         ]
       });
 
-      // Deletar mensagem de negação após 5 segundos
+      // Deletar mensagens após 5 segundos
       setTimeout(() => {
         deniedMessage.delete().catch(() => {});
         message.delete().catch(() => {});
       }, 5000);
+
       return;
     } catch (logError) {
       console.error('Erro ao registrar comando não autorizado:', logError);
     }
   }
 
-  // Sistema de cooldown
+  // Gerenciar cooldowns
   const { cooldowns } = client;
   if (!cooldowns.has(command.name)) {
     cooldowns.set(command.name, new Collection());
@@ -252,8 +240,7 @@ client.on('messageCreate', async message => {
       const cooldownMsg = await message.reply(
         `⏱️ Aguarde ${timeLeft.toFixed(1)} segundos antes de usar o comando \`${command.name}\` novamente.`
       );
-      
-      // Deletar mensagens após 5 segundos
+
       setTimeout(() => {
         cooldownMsg.delete().catch(() => {});
         message.delete().catch(() => {});
@@ -265,14 +252,13 @@ client.on('messageCreate', async message => {
   timestamps.set(message.author.id, now);
   setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
 
-  // Executar comando com tratamento de erro
+  // Executar comando
   try {
     console.log(`🔄 Executando comando: ${command.name} (Usuário: ${message.author.tag})`);
     await command.execute(message, args, client);
   } catch (error) {
     console.error(`❌ Erro no comando ${command.name}:`, error);
-    
-    // Tentar enviar log de erro do comando
+
     try {
       await LogManager.sendLog(client, {
         title: '❌ Erro em Comando',
@@ -288,7 +274,6 @@ client.on('messageCreate', async message => {
       console.error('Erro ao registrar erro de comando:', logError);
     }
 
-    // Mensagem de erro para o usuário
     const errorMsg = await message.reply('❌ Ocorreu um erro ao executar este comando.');
     setTimeout(() => {
       errorMsg.delete().catch(() => {});
@@ -297,7 +282,7 @@ client.on('messageCreate', async message => {
   }
 });
 
-// Teste de resposta rápida
+// Comando teste para verificar se o bot está online e respondendo
 client.on('messageCreate', message => {
   if (message.content === '!!teste') {
     const pingMs = Date.now() - message.createdTimestamp;
@@ -305,11 +290,10 @@ client.on('messageCreate', message => {
   }
 });
 
-// Manipulação de erros globais
+// Tratamento global de erros não tratados e exceções
 process.on('unhandledRejection', async (error) => {
   console.error('❌ Erro não tratado:', error);
   
-  // Se o cliente estiver pronto, tentar logar erro crítico
   if (client.isReady()) {
     try {
       await LogManager.logCriticalError(client, error, 'Unhandled Rejection');
@@ -322,7 +306,6 @@ process.on('unhandledRejection', async (error) => {
 process.on('uncaughtException', async (error) => {
   console.error('❌ Exceção não capturada:', error);
   
-  // Se o cliente estiver pronto, tentar logar erro crítico
   if (client.isReady()) {
     try {
       await LogManager.logCriticalError(client, error, 'Uncaught Exception');
@@ -330,23 +313,18 @@ process.on('uncaughtException', async (error) => {
       console.error('❌ Erro ao registrar erro crítico:', logError);
     }
   }
-
-  // Encerrar o processo após registrar o erro
+  
   process.exit(1);
 });
 
 // Login no Discord
 console.log('Conectando ao Discord...');
 client.login(config.TOKEN)
-  .then(async () => {
+  .then(() => {
     console.log('✅ Bot conectado ao Discord com sucesso!');
   })
   .catch(error => {
     console.error('❌ Erro crítico ao conectar ao Discord:', error);
-    
-    // Registrar erro de conexão
     LogManager.logCriticalError(client, error, 'Falha na Conexão do Bot');
-    
-    // Encerrar o processo
     process.exit(1);
   });

@@ -14,59 +14,36 @@ function setupMusicSystem(client) {
   try {
     console.log('🎵 Inicializando sistema de música com DisTube...');
     
-    // Configurar caminhos
     const ytdlpPath = process.env.YTDLP_PATH || path.join(__dirname, '..', 'ffmpeg', 'yt-dlp.exe');
     const ffmpegPath = process.env.FFMPEG_PATH || path.join(__dirname, '..', 'ffmpeg', 'ffmpeg.exe');
-    
-    // Log dos caminhos para diagnóstico
-    console.log(`YT-DLP Path: ${ytdlpPath}`);
-    console.log(`FFmpeg Path: ${ffmpegPath}`);
-    
-    // Verificar se os executáveis existem
+
     if (fs.existsSync(ffmpegPath)) {
       console.log('✅ FFmpeg encontrado em:', ffmpegPath);
     } else {
       console.error('❌ FFmpeg não encontrado em:', ffmpegPath);
     }
-    
+
     if (fs.existsSync(ytdlpPath)) {
       console.log('✅ yt-dlp encontrado em:', ytdlpPath);
     } else {
       console.error('❌ yt-dlp não encontrado em:', ytdlpPath);
     }
-    
-    // Configurar os plugins do DisTube
-    const plugins = [
-      new SpotifyPlugin({
-        emitEventsAfterFetching: true,
-      }),
-      new SoundCloudPlugin(),
-      new YtDlpPlugin({
-        update: true,
-        path: ytdlpPath
-      })
-    ];
-    
-    // Criar uma instância do DisTube
-    const distube = new DisTube(client, {
-      plugins: plugins,
-      searchSongs: 1,
-      searchCooldown: 30,
-      leaveOnEmpty: true,
-      leaveOnFinish: false,
-      leaveOnStop: false,
-      emitNewSongOnly: true,
-      emitAddSongWhenCreatingQueue: false,
-      emitAddListWhenCreatingQueue: false,
-      nsfw: false,
-      ytdlOptions: {
-        quality: 'highestaudio',
-        filter: 'audioonly',
-        highWaterMark: 1 << 25
-      }
-    });
-    
-    // Adicionar eventos ao DisTube
+
+const plugins = [
+  new SpotifyPlugin({
+    api: {
+      clientId: 'ce9512970b244441878e3877deab1d69',
+      clientSecret: '6a17b72541604ba4905200648d790f0f'
+    }
+  }),
+  new YtDlpPlugin({
+    update: true,
+    path: ytdlpPath
+  })
+];
+
+
+
     distube
       .on('playSong', (queue, song) => {
         const embed = new EmbedBuilder()
@@ -79,7 +56,7 @@ function setupMusicSystem(client) {
             { name: 'Fonte', value: song.source, inline: true }
           )
           .setColor('#3498db');
-        
+
         queue.textChannel.send({ embeds: [embed] });
       })
       .on('addSong', (queue, song) => {
@@ -93,7 +70,7 @@ function setupMusicSystem(client) {
             { name: 'Solicitado por', value: `<@${song.user.id}>`, inline: true }
           )
           .setColor('#2ecc71');
-        
+
         queue.textChannel.send({ embeds: [embed] });
       })
       .on('addList', (queue, playlist) => {
@@ -106,13 +83,13 @@ function setupMusicSystem(client) {
             { name: 'Solicitado por', value: `<@${playlist.user.id}>`, inline: true }
           )
           .setColor('#9b59b6');
-        
+
         queue.textChannel.send({ embeds: [embed] });
       })
-      .on('error', (channel, error) => {
+      .on('error', (error, queue, song) => {
         console.error('Erro no DisTube:', error);
-        if (channel) {
-          channel.send(`❌ Erro ao reproduzir música: ${error.message || 'Erro desconhecido'}`);
+        if (queue && queue.textChannel) {
+          queue.textChannel.send(`❌ Erro ao reproduzir música: ${error.message || 'Erro desconhecido'}`);
         }
       })
       .on('empty', channel => {
@@ -120,6 +97,8 @@ function setupMusicSystem(client) {
       })
       .on('finish', queue => {
         queue.textChannel.send('🏁 Não há mais músicas na fila!');
+        // Se quiser que o bot saia ao fim da fila:
+        // queue.voice.leave();
       })
       .on('disconnect', queue => {
         queue.textChannel.send('👋 Desconectado do canal de voz!');
@@ -131,10 +110,8 @@ function setupMusicSystem(client) {
         queue.volume = 100;
         queue.autoplay = false;
       });
-    
-    // Adicionar a instância DisTube ao cliente
+
     client.distube = distube;
-    
     console.log('✅ Sistema de música DisTube inicializado com sucesso!');
     return distube;
   } catch (error) {
