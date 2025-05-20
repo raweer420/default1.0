@@ -1,30 +1,43 @@
-const { DisTube } = require('distube');
-const { SpotifyPlugin } = require('@distube/spotify');
-const { YtDlpPlugin } = require('@distube/yt-dlp');
-const path = require('path');
+const { DisTube } = require("distube");
+const { SpotifyPlugin } = require("@distube/spotify");
+const { SoundCloudPlugin } = require("@distube/soundcloud");
+const { YtDlpPlugin } = require("@distube/yt-dlp");
 
 function setupMusicSystem(client) {
   const distube = new DisTube(client, {
-    emitNewSongOnly: true,
     plugins: [
-      new SpotifyPlugin({
-        api: {
-          clientId: 'ce9512970b244441878e3877deab1d69',
-          clientSecret: '6a17b72541604ba4905200648d790f0f',
-        }
-      }),
-      new YtDlpPlugin({
-        update: true,
-        // opcional: path para o yt-dlp (se tiver instalado localmente)
-        // path: path.join(__dirname, '..', 'ffmpeg', 'yt-dlp.exe')
-      }),
+      new SpotifyPlugin(),
+      new SoundCloudPlugin(),
+      new YtDlpPlugin(),
     ],
   });
 
-  distube.on('error', (err, queue) => {
-    console.error('Erro no DisTube:', err);
-    if (queue) queue.textChannel.send(`❌ Erro ao reproduzir música: ${err.message}`);
-  });
+  // Salva no client para os comandos acessarem
+  client.distube = distube;
+
+  distube
+    .on("playSong", (queue, song) => {
+      console.log(`▶️ Tocando: ${song.name} - ${song.formattedDuration}`);
+      queue.textChannel?.send(`🎶 Tocando: **${song.name}** — \`${song.formattedDuration}\``).catch(() => {});
+    })
+    .on("addSong", (queue, song) => {
+      console.log(`➕ Música adicionada: ${song.name} - ${song.formattedDuration}`);
+      queue.textChannel?.send(`➕ Adicionada à fila: **${song.name}** — \`${song.formattedDuration}\``).catch(() => {});
+    })
+    .on("error", (queue, error) => {
+      console.error(`❌ Erro no DisTube:`, error);
+      if (queue && queue.textChannel) {
+        queue.textChannel.send(`❌ Ocorreu um erro: ${error.message || error}`).catch(() => {});
+      }
+    })
+    .on("empty", queue => {
+      console.log("👥 Canal de voz vazio, saindo...");
+      queue.textChannel?.send("👥 Canal de voz vazio, saindo...").catch(() => {});
+    })
+    .on("finish", queue => {
+      console.log("🏁 Fim da fila de músicas.");
+      queue.textChannel?.send("🏁 Fim da fila de músicas.").catch(() => {});
+    });
 
   return distube;
 }
